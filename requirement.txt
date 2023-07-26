@@ -1,5 +1,5 @@
 logging
-requests==<version>
-pandas==<version>
-sqlalchemy==<version>
-iFinDPy==<version>
+requests==2.28.1
+pandas==1.5.3
+sqlalchemy==1.4.39
+iFinDPy
