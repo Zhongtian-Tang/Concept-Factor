@@ -1,0 +1,5 @@
+logging
+requests==<version>
+pandas==<version>
+sqlalchemy==<version>
+iFinDPy==<version>
