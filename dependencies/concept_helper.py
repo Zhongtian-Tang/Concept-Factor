@@ -64,7 +64,6 @@ def get_concept_status(id, name):
         df['conceptSimilarity'] = df['conceptSimilarity'].fillna(0)
         df['similarity'] = df['conceptSimilarity'].astype(float)
         df[['status', 'tradedate']] = df.apply(calculate_status_and_recordDate, axis=1, result_type='expand')
-        df['tradedate'] = df['tradedate'].astype(datetime.date)
         df['status'] = df['status'].astype(str).str.slice(0, 30) 
         df['concept'] = name
         df['concept'] = df['concept'].astype(str).str.slice(0, 30)
