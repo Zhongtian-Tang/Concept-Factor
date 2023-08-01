@@ -47,18 +47,28 @@ def get_concept_status(id, name):
     name: str 概念名称
     concept_df: DataFrame 概念纳入数据
     """
+    def calculate_status_and_recordDate(row):
+        if pd.notna(row['addDate']):
+            return '纳入', row['addDate']
+        elif pd.notna(row['delDate']):
+            return '剔除', row['delDate']
+        else:
+            return '未知', None
     try:
         symbols = ConceptEvent.get_concept_symbol(id)['symbols']
         df = pd.DataFrame(symbols)
         df = df[['code', 'delDate', 'conceptSimilarity', 'name', 'addDate']]
-        df['wind_code'] = df['code'].astype(str)
-        df['sec_name'] = df['name'].astype(str)
+        df['wind_code'] = df['code'].astype(str).str.slice(0, 9)
+        df['sec_name'] = df['name'].astype(str).str.slice(0, 30)
         df['conceptSimilarity'] = pd.to_numeric(df['conceptSimilarity'])
         df['conceptSimilarity'] = df['conceptSimilarity'].fillna(0)
         df['similarity'] = df['conceptSimilarity'].astype(float)
-        df['tradedate'] = df['addDate'].fillna(df['delDate']).astype(str)
-        df['status'] = df['addDate'].notna().map({True: '纳入', False: '剔除'})
+        df[['status', 'tradedate']] = df.apply(calculate_status_and_recordDate, axis=1, result_type='expand')
+        df['tradedate'] = df['tradedate'].astype(datetime.date)
+        df['status'] = df['status'].astype(str).str.slice(0, 30) 
         df['concept'] = name
+        df['concept'] = df['concept'].astype(str).str.slice(0, 30)
+        df['updatetime'] = datetime.datetime.now()
         final_df = df[['wind_code', 'sec_name', 'tradedate', 'similarity','concept','status']]
         logging.info('概念%s数据获取成功' % name)
         return final_df
@@ -138,7 +148,7 @@ def concept_stock_data(df, date='2023-07-13'):
     concept_sec_df: DataFrame 概念股票映射表
     """
     all_concepts = []
-    for concepts in df['ths_the_concept_stock']:
+    for concepts in df['concepts']:
         if pd.isna(concepts) or concepts == '':       # 检查是否为空值
             continue
         all_concepts.extend(concepts.split(','))
@@ -146,8 +156,8 @@ def concept_stock_data(df, date='2023-07-13'):
     
     concept_stock_list = []
     for concept in unique_concepts:
-        stocks_with_concept =  df[df['ths_the_concept_stock'].str.contains(concept, regex=False)]
-        concept_stock_list.append({'concept': concept, 'stock_num': len(stocks_with_concept), 'stock_code': ','.join(stocks_with_concept['thscode'].values)})
+        stocks_with_concept =  df[df['concepts'].str.contains(concept, regex=False)]
+        concept_stock_list.append({'concept': concept, 'stock_num': len(stocks_with_concept), 'stock_code': ','.join(stocks_with_concept['wind_code'].values)})
 
     concept_stock_df = pd.DataFrame(concept_stock_list)
     concept_stock_df['date'] = pd.to_datetime(date)
@@ -168,7 +178,7 @@ def write_data_to_sql(data_df, table_name):
     table_name: str 表名
     """
     try:
-        engine = create_engine('mysql+pymysql://tangzt:zxcv1234@localhost:3306/tangzt?charset=utf8')
+        engine = create_engine('mysql+pymysql://tangzt:zxcv1234@10.224.1.70:3306/tangzt?charset=utf8')
         data_dict = {col: VARCHAR(length=30) for col in data_df.columns}            # 注意长度
         data_df.to_sql(table_name, engine, if_exists='replace', index=False, dytape=data_dict)
         logging.info('数据写入数据库成功')
@@ -178,3 +188,4 @@ def write_data_to_sql(data_df, table_name):
 
 
 
+###################################################################################### 指数编制 ###########################################################################################

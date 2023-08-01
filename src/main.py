@@ -2,7 +2,7 @@ import logging
 from iFinDPy import *
 import pandas as pd
 from sqlalchemy import create_engine, VARCHAR, DATETIME, TEXT
-from concept_helper import *
+from dependencies.concept_helper import *
 
 # 设置日志
 logging.basicConfig(filename='concept_running.log', level=logging.INFO, format='%(asctime)s:%(levelname)s:%(message)s')
