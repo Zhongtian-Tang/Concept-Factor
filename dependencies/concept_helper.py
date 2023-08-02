@@ -2,6 +2,7 @@ import logging
 from iFinDPy import *
 import datetime
 import pandas as pd
+import numpy as np
 import calendar
 from ConceptEvent import ConceptEvent
 from sqlalchemy import create_engine, VARCHAR
@@ -47,28 +48,19 @@ def get_concept_status(id, name):
     name: str 概念名称
     concept_df: DataFrame 概念纳入数据
     """
-    def calculate_status_and_recordDate(row):
-        if pd.notna(row['addDate']):
-            return '纳入', row['addDate']
-        elif pd.notna(row['delDate']):
-            return '剔除', row['delDate']
-        else:
-            return '未知', None
     try:
         symbols = ConceptEvent.get_concept_symbol(id)['symbols']
-        df = pd.DataFrame(symbols)
-        df = df[['code', 'delDate', 'conceptSimilarity', 'name', 'addDate']]
-        df['wind_code'] = df['code'].astype(str).str.slice(0, 9)
-        df['sec_name'] = df['name'].astype(str).str.slice(0, 30)
-        df['conceptSimilarity'] = pd.to_numeric(df['conceptSimilarity'])
-        df['conceptSimilarity'] = df['conceptSimilarity'].fillna(0)
-        df['similarity'] = df['conceptSimilarity'].astype(float)
-        df[['status', 'tradedate']] = df.apply(calculate_status_and_recordDate, axis=1, result_type='expand')
-        df['status'] = df['status'].astype(str).str.slice(0, 30) 
-        df['concept'] = name
-        df['concept'] = df['concept'].astype(str).str.slice(0, 30)
-        df['updatetime'] = datetime.datetime.now()
-        final_df = df[['wind_code', 'sec_name', 'tradedate', 'similarity','concept','status']]
+        final_df = (pd.DataFrame(symbols).assign(
+            wind_code=lambda df: df['code'].astype(str),
+            sec_name=lambda df: df['name'].astype(str),
+            similarity=lambda df: pd.to_numeric(df['conceptSimilarity'], errors='coerce').fillna(0).astype(float),
+            tradedate=lambda df: df['addDate'].fillna(df['delDate']).astype('datetime64[D]'),
+            status=lambda df: df['addDate'].notna().replace({True: '纳入', False: '剔除'}).astype(str),
+            concept=name,
+            updatetime=datetime.datetime.now()
+        )
+        [['wind_code', 'sec_name', 'tradedate', 'similarity','concept','status','updatetime']]
+        )
         logging.info('概念%s数据获取成功' % name)
         return final_df
     except Exception as e:
@@ -147,16 +139,17 @@ def concept_stock_data(df, date='2023-07-13'):
     concept_sec_df: DataFrame 概念股票映射表
     """
     all_concepts = []
-    for concepts in df['concepts']:
+    for concepts in df['ths_the_concept_stock']:
         if pd.isna(concepts) or concepts == '':       # 检查是否为空值
             continue
         all_concepts.extend(concepts.split(','))
     unique_concepts = list(set(all_concepts))            # 去重
     
+    concept_series = df['ths_the_concept_stock'].str.split(',')
     concept_stock_list = []
     for concept in unique_concepts:
-        stocks_with_concept =  df[df['concepts'].str.contains(concept, regex=False)]
-        concept_stock_list.append({'concept': concept, 'stock_num': len(stocks_with_concept), 'stock_code': ','.join(stocks_with_concept['wind_code'].values)})
+        stocks_with_concept =  df[concept_series.apply(lambda x: concept in x)]
+        concept_stock_list.append({'concept': concept, 'stock_num': len(stocks_with_concept), 'stock_code': ','.join(stocks_with_concept['thscode'].values)})
 
     concept_stock_df = pd.DataFrame(concept_stock_list)
     concept_stock_df['date'] = pd.to_datetime(date)
