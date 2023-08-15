@@ -11,7 +11,9 @@ pip install -r requirements.txt
 ```
 
 ## 首先
-导入必要的模块:     
+
+导入必要的模块:
+
 ```python
 import concept_helper
 import ConceptEvent
@@ -20,6 +22,7 @@ import main
 ```
 
 **为了使用 TokenUtil 类，你需要提供同花顺 API 的 APPKEY 和 APPSECRET。**
+
 ```python
 token_util = TokenUtil.TokenUtil()
 token_util.set_APPKEY('你的_APPKEY', '你的_APPSECRET')
@@ -27,11 +30,7 @@ access_token = token_util.get_token(token_util)
 ```
 
 **运行主函数，使用以下命令**
+
 ```python
 main.job('2023-07-25')  # 用你需要的日期替换 '2023-07-25'
 ```
-
-
-## 贡献
-欢迎提交拉取请求。对于重大变更，请先打开一个 issue 来讨论你想要改变的内容。
-请确保适当地更新了测试。

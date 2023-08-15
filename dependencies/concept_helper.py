@@ -54,8 +54,8 @@ def get_concept_status(id, name):
             wind_code=lambda df: df['code'].astype(str),
             sec_name=lambda df: df['name'].astype(str),
             similarity=lambda df: pd.to_numeric(df['conceptSimilarity'], errors='coerce').fillna(0).astype(float),
+            status=lambda df: df['isvalid'].replace({1: '纳入', 0: '剔除'}).astype(str),
             tradedate=lambda df: df['addDate'].fillna(df['delDate']).astype('datetime64[D]'),
-            status=lambda df: df['addDate'].notna().replace({True: '纳入', False: '剔除'}).astype(str),
             concept=name,
             updatetime=datetime.datetime.now()
         )
@@ -67,97 +67,37 @@ def get_concept_status(id, name):
         logging.error('概念%s数据获取失败' % name)
         logging.error(e)
         return pd.DataFrame()
-    
-
-# 概念纳入表
-def concept_data(update_date, start_date, end_date, index_codes):
-    """
-    通过数据池获取所有概念指数的纳入剔除记录, 返回概念纳入表
-    
-    update_date: datetime 更新日期
-    start_date: str 开始日期
-    end_date: str 结束日期
-    index_codes: DataFrame 概念指数代码列表
-    final_df: DataFrame 概念纳入表
-    """
-    append_data = []
-    for _, index_code in index_codes.iterrows():
-        concept_record = THS_DR('p03316','iv_zsdm={};iv_sdate={};iv_edate={};iv_zt=全部'.format(index_code['codes'], start_date, end_date)
-                                ,'p03316_f001:Y,p03316_f002:Y,p03316_f003:Y,p03316_f004:Y','format:dataframe')              # 获取指定日期范围内概念指数纳入剔除纪录
-        if concept_record.errorcode != 0:
-            logging.info('缺少 {} 指数的进出纪录'.format(index_code['index_name']))
-            continue
-        else:
-            df = concept_record.data   
-            df['INDEX_CODE'] = index_code['codes']
-            df['INDEX_NAME'] = index_code['index_name']
-            append_data.append(df)                                                                                           # 设置日期为索引
-    final_df = pd.concat(append_data,ignore_index=True)
-    final_df = final_df.rename(columns={'p03316_f001':'RECORD_DATE','p03316_f002':'wind_code','p03316_f003':'SEC_NAME','p03316_f004':'STATUS'}) # 重命名列名
-    final_df.astype({'RECORD_DATE': 'str', 'wind_code': 'str','SEC_NAME':'str','STATUS':'str'})        # 将列的数据类型转换为字符串
-    final_df['RECORD_DATE'] = pd.to_datetime(final_df['RECORD_DATE'], format='%Y%m%d')
-    final_df['RECORD_DATE'] = final_df['RECORD_DATE'].dt.strftime('%Y-%m-%d')                        # 更改纳入日期格式
-    final_df['updatetime'] = update_date.strftime('%Y-%m-%d')
-    final_df = final_df[['updatetime','wind_code', 'SEC_NAME', 'RECORD_DATE', 'STATUS', 'INDEX_CODE', 'INDEX_NAME']]                                                             # 设置更新时间
-    return final_df
-
-
+        
 # 股票概念映射表
-def stock_concept_data(date='2023-07-13'):
-    """
-    通过数据池获取指定日期的所有A股代码, 再通过代码列表返回股票概念映射表
-    
-    code_ls: list 代码列表
-    date: str 日期
-    data_df: DataFrame 股票概念映射表
-    """
-    target_stock = THS_DP('block', '{};001005010'.format(date), 'date:N,thscode:Y,security_name:N')                 #001005010: A股
-    if target_stock.errorcode != 0:
-        logging.info('error:{}'.format(target_stock.errmsg))
-        return None
-    else:
-        code_ls = sorted(target_stock.data['THSCODE'].tolist())
-        data_result = THS_BD(code_ls, 'ths_stock_short_name_stock;ths_the_concept_stock',';{}'.format(date))
-        if data_result.errorcode != 0:
-            logging.info('error:{}'.format(data_result.errmsg))
-            return None
-        else:
-            stock_concept_df = data_result.data
-            stock_concept_df['concept_num'] = stock_concept_df['ths_the_concept_stock'].apply(lambda x: 0 if pd.isna(x) or x == '' else len(x.split(',')))          # 计算每只股票的概念数量, 排除掉空值
-            stock_concept_df['date'] = pd.to_datetime(date)
-            # stock_concept_df.set_index('date', inplace=True)
-            logging.info('日期: {} 股票概念映射表生成成功'.format(date))                                                                                                      # 设置日期为索引 
-    return stock_concept_df
-
+def concept_stocks_data(concept_status: pd.DataFrame, date: datetime.date):
+    target_df = concept_status[concept_status['tradedate'] <= date]
+    def stocks_in_concept_on_date(sub_df, concept_name):
+        concept_df = sub_df[sub_df['concept'] == concept_name]
+        in_stocks = concept_df[concept_df['status'] == '纳入']['wind_code'].unique()
+        out_stocks = concept_df[concept_df['status'] == '剔除']['wind_code'].unique()
+        stocks_on_date = np.setdiff1d(in_stocks, out_stocks)
+        return stocks_on_date
+    result = {}
+    for concept_name in target_df['concept'].unique():
+        result[concept_name] = stocks_in_concept_on_date(target_df, concept_name)
+    result_df = pd.DataFrame({
+        'concept': result.keys(),
+        'stocks': [list(stocks) for stocks in result.values()],
+        'count': [len(stocks) for stocks in result.values()]})
+    result_df['stocks'] = result_df['stocks'].apply(lambda x: ','.join(map(str, x)))
+    return result_df
 
 # 概念股票映射表
-def concept_stock_data(df, date='2023-07-13'):
-    """
-    通过股票概念映射表返回概念股票映射表
-    
-    df: DataFrame 股票概念映射表
-    concept_sec_df: DataFrame 概念股票映射表
-    """
-    all_concepts = []
-    for concepts in df['ths_the_concept_stock']:
-        if pd.isna(concepts) or concepts == '':       # 检查是否为空值
-            continue
-        all_concepts.extend(concepts.split(','))
-    unique_concepts = list(set(all_concepts))            # 去重
-    
-    concept_series = df['ths_the_concept_stock'].str.split(',')
-    concept_stock_list = []
-    for concept in unique_concepts:
-        stocks_with_concept =  df[concept_series.apply(lambda x: concept in x)]
-        concept_stock_list.append({'concept': concept, 'stock_num': len(stocks_with_concept), 'stock_code': ','.join(stocks_with_concept['thscode'].values)})
-
-    concept_stock_df = pd.DataFrame(concept_stock_list)
-    concept_stock_df['date'] = pd.to_datetime(date)
-    concept_stock_df = concept_stock_df.sort_values(by='stock_num', ascending=False)
-    # concept_stock_df.set_index('date', inplace=True)          # 设置日期为索引
-    logging.info('日期: {} 概念股票映射表生成成功'.format(date)) 
-    return concept_stock_df
-
+def stock_concepts_data(concept_status: pd.DataFrame, date: datetime.date):
+    target_df = concept_status[concept_status['tradedate'] <= date]
+    target_sorted = target_df.sort_values(by=['wind_code', 'concept', 'tradedate'])
+    latest_status = target_sorted.drop_duplicates(subset=['wind_code', 'concept'], keep='last')
+    # 过滤出纳入的记录
+    in_status = latest_status[latest_status['status'] == '纳入']
+    grouped = in_status.groupby('wind_code').agg(concepts = ('concept', 'unique'),
+                                                 count = ('concept', 'size')).reset_index()
+    grouped['concepts'] = grouped['concepts'].apply(lambda x: ','.join(map(str, x)))
+    return grouped
 
 ########################################################################################## 数据获取函数结束 ##########################################################################################
 
