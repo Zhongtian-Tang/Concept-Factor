@@ -99,25 +99,30 @@ def stock_concepts_data(concept_status: pd.DataFrame, date: datetime.date):
     grouped['concepts'] = grouped['concepts'].apply(lambda x: ','.join(map(str, x)))
     return grouped
 
-########################################################################################## 数据获取函数结束 ##########################################################################################
-
-########################################################################################## 数据写入函数开始 ##########################################################################################
-def write_data_to_sql(data_df, table_name):
+# 概念热度指数获取
+def conbcept_hot_index():
     """
-    将数据写入数据库
-    
-    data_df: DataFrame 数据
-    table_name: str 表名
+    统计当期标的数大于10的指数并计算热度指数
     """
-    try:
-        engine = create_engine('mysql+pymysql://tangzt:zxcv1234@10.224.1.70:3306/tangzt?charset=utf8')
-        data_dict = {col: VARCHAR(length=30) for col in data_df.columns}            # 注意长度
-        data_df.to_sql(table_name, engine, if_exists='replace', index=False, dytape=data_dict)
-        logging.info('数据写入数据库成功')
-    except Exception as e:
-        logging.error('数据写入数据库失败')
-        logging.error(e)
 
 
 
-###################################################################################### 指数编制 ###########################################################################################
+
+
+# 概念价格指数构建
+def concept_price_index(concept: str, date: datetime.date, 
+                        return_df: pd.DataFrame, 
+                        concept_status: pd.DataFrame,
+                        concept_stocks: pd.DataFrame):
+    """
+    计算当期概念主题的收益率
+    """
+    # 相似度权重
+    target_df = concept_status[(concept_status['tradedate'] <= date) & (concept_status['concept'] == concept)]
+    in_df = target_df[target_df['status'] == '纳入']['wind_code']
+    out_df = target_df[target_df['status'] == '剔除']['wind_code']
+    codes_list = np.setdiff1d(in_df, out_df)
+    similarity = target_df[target_df['wind_code'].isin(codes_list)]['similarity']
+    # 获取股票价格数据
+    stock_return = return_df[(return_df['wind_code'].isin(codes_list)) & (return_df['DATETIME'] == date)]['PCT_CHG']
+    return np.dot(stock_return, similarity)

@@ -12,6 +12,7 @@ from iFinDPy import *
 import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.types import VARCHAR, DATE, FLOAT, INT, DATETIME
+import datetime
 
 sys.path.append(r'C:\Users\hazc\Desktop\Concept-Factor\dependencies')
 import concept_helper as cp
@@ -21,7 +22,7 @@ from ConceptEvent import ConceptEvent
 logging.basicConfig(filename='concept_running.log', level=logging.INFO, format='%(asctime)s:%(levelname)s:%(message)s')
 
 
-
+#################################################################################### 更新概念数据 ##################################################################
 def update_concepts_status():
     """
     更新市场概念纳入剔除表
@@ -59,5 +60,7 @@ def update_map_data(date, concept_status:pd.DataFrame):
 
     
 
+#################################################################################### 更新概念数据 ##################################################################
 
 
+#################################################################################### 概念指数数据 ##################################################################
