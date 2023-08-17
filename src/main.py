@@ -2,7 +2,7 @@
 Author: Tangzhong-Tian 116010205@link.cuhk.edu.cn
 Date: 2023-07-26 14:18:52
 LastEditors: Tangzhong-Tian 116010205@link.cuhk.edu.cn
-LastEditTime: 2023-08-15 17:05:44
+LastEditTime: 2023-08-17 14:31:47
 FilePath: \Concept-Factor\src\main.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -47,8 +47,8 @@ def update_map_data(date, concept_status:pd.DataFrame):
     date: str 日期
     concept_status: DataFrame 概念状态表
     """
-    stock_concept = cp.stock_concepts_data(concept_status, date)
-    concept_stock = cp.concept_stocks_data(concept_status, date)
+    stock_concept = cp.get_stock_concepts_data(concept_status, date)
+    concept_stock = cp.get_concept_stocks_data(concept_status, date)
     stock_concept['record_date'] = date
     concept_stock['record_date'] = date
     stock_concept['updatetime'] = datetime.datetime.now()
@@ -64,3 +64,19 @@ def update_map_data(date, concept_status:pd.DataFrame):
 
 
 #################################################################################### 概念指数数据 ##################################################################
+def update_concept_price_index(concept_status:pd.DataFrame,
+                               start_date:str,
+                               end_date:str):
+    """
+    更新概念价格指数数据
+    """
+    concept_similarity_status = cp.concept_similarity_status(concept_status)
+    daily_return = cp.daily_retun_data(start_date, end_date)
+    concepts_ls = concept_status['concept'].unique().tolist()
+    concept_index_DF = pd.DataFrame(columns=concepts_ls)
+    for concept in concepts_ls:
+        concept_index = cp.calculate_concept_price_index(concept, concept_similarity_status, daily_return)
+        concept_index_DF[concept] = concept_index
+    
+    return concept_index_DF
+    
