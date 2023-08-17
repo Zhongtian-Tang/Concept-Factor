@@ -22,24 +22,6 @@ def thslogin():
         logging.info('登录成功')
         return True
 
-# 获取月度最后一天    
-def get_last_days(start_date, end_date):
-    """
-    获取指定日期范围内的月度最后一天
-    start_date: str 开始日期
-    end_date: str 结束日期
-    """
-    date_ls = []
-    current_date = datetime.datetime.strptime(start_date, '%Y-%m-%d')
-    end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
-    while current_date <= end_date:
-        last_day = calendar.monthrange(current_date.year, current_date.month)[1]
-        last_day_date = datetime.date(current_date.year, current_date.month, last_day)
-        date_ls.append(last_day_date.strftime('%Y-%m-%d'))
-        current_date = current_date.replace(day=1) + datetime.timedelta(days=32)
-
-    return date_ls
-
 ######################################################################################################## 数据获取函数 #############################################################
 # 获取概念纳入数据
 def get_concept_status(id, name):
@@ -69,7 +51,7 @@ def get_concept_status(id, name):
         return pd.DataFrame()
         
 # 股票概念映射表
-def concept_stocks_data(concept_status: pd.DataFrame, date: datetime.date):
+def get_concept_stocks_data(concept_status: pd.DataFrame, date: datetime.date):
     target_df = concept_status[concept_status['tradedate'] <= date]
     def stocks_in_concept_on_date(sub_df, concept_name):
         concept_df = sub_df[sub_df['concept'] == concept_name]
@@ -88,7 +70,7 @@ def concept_stocks_data(concept_status: pd.DataFrame, date: datetime.date):
     return result_df
 
 # 概念股票映射表
-def stock_concepts_data(concept_status: pd.DataFrame, date: datetime.date):
+def get_stock_concepts_data(concept_status: pd.DataFrame, date: datetime.date):
     target_df = concept_status[concept_status['tradedate'] <= date]
     target_sorted = target_df.sort_values(by=['wind_code', 'concept', 'tradedate'])
     latest_status = target_sorted.drop_duplicates(subset=['wind_code', 'concept'], keep='last')
@@ -99,6 +81,9 @@ def stock_concepts_data(concept_status: pd.DataFrame, date: datetime.date):
     grouped['concepts'] = grouped['concepts'].apply(lambda x: ','.join(map(str, x)))
     return grouped
 
+######################################################################################################## 数据获取函数 #############################################################
+
+
 # 概念热度指数获取
 def conbcept_hot_index():
     """
@@ -107,22 +92,76 @@ def conbcept_hot_index():
 
 
 
+# 概念标的状态表
+def concept_similarity_status(concept_status: pd.DataFrame):
+    """
+    计算当期概念标的的相似度激活状态
+    """
+    concept_status_sorted = concept_status.sort_values(by=['tradedate'])
+    concept_status_sorted['status_val'] = concept_status_sorted['status'].replace({'纳入': 1, '剔除': -1})
+    cum_status = pd.pivot_table(concept_status_sorted, values='status_val', index='tradedate', columns=['concept', 'wind_code'], aggfunc='sum').cumsum().fillna(method='ffill')
+    active_stocks = (cum_status > 0).astype(int)
+    simpilarity_pivot = pd.pivot_table(concept_status_sorted, index='tradedate', columns=['concept', 'wind_code'], values='similarity').fillna(method='ffill')
+    similarity_status_data = active_stocks * simpilarity_pivot
+    return similarity_status_data
 
 
-# 概念价格指数构建
-def concept_price_index(concept: str, date: datetime.date, 
-                        return_df: pd.DataFrame, 
-                        concept_status: pd.DataFrame,
-                        concept_stocks: pd.DataFrame):
+def daily_retun_data(start_date: str, end_date:str):
+    engine = create_engine('mysql+pymysql://tangzt:zxcv1234@10.224.1.70:3306/jydb?charset=utf8')
+    query = f"""
+    SELECT DATETIME, wind_code, PCT_CHG FROM jydb.dstock
+    WHERE DATETIME BETWEEN '{start_date}' AND '{end_date}'
     """
-    计算当期概念主题的收益率
+    return_df = pd.read_sql(query, engine)
+    daily_return_pivot = pd.pivot_table(return_df, values='PCT_CHG', index='DATETIME', columns='wind_code')
+    return daily_return_pivot
+
+def calculate_concept_price_index(concept: str,
+                                  concept_similarity_status: pd.DataFrame,
+                                  daily_return_pivot: pd.DataFrame):
     """
-    # 相似度权重
-    target_df = concept_status[(concept_status['tradedate'] <= date) & (concept_status['concept'] == concept)]
-    in_df = target_df[target_df['status'] == '纳入']['wind_code']
-    out_df = target_df[target_df['status'] == '剔除']['wind_code']
-    codes_list = np.setdiff1d(in_df, out_df)
-    similarity = target_df[target_df['wind_code'].isin(codes_list)]['similarity']
-    # 获取股票价格数据
-    stock_return = return_df[(return_df['wind_code'].isin(codes_list)) & (return_df['DATETIME'] == date)]['PCT_CHG']
-    return np.dot(stock_return, similarity)
+    计算加权概念价格指数
+    """
+    concept_similarity_status = concept_similarity_status.reindex(daily_return_pivot.index).fillna(method='ffill')
+    target_df = concept_similarity_status.loc[:, concept]
+    weights = target_df.apply(lambda x: x / x.sum(), axis=1)
+    weighted_return = (daily_return_pivot * weights).sum(axis=1)
+    return weighted_return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##################################################################### 数据库操作函数 #####################################################################
+
+##################################################################### 方便的工具函数 #####################################################################
+# 获取月度最后一天    
+def get_last_days(start_date, end_date):
+    """
+    获取指定日期范围内的月度最后一天
+    start_date: str 开始日期
+    end_date: str 结束日期
+    """
+    date_ls = []
+    current_date = datetime.datetime.strptime(start_date, '%Y-%m-%d')
+    end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
+    while current_date <= end_date:
+        last_day = calendar.monthrange(current_date.year, current_date.month)[1]
+        last_day_date = datetime.date(current_date.year, current_date.month, last_day)
+        date_ls.append(last_day_date.strftime('%Y-%m-%d'))
+        current_date = current_date.replace(day=1) + datetime.timedelta(days=32)
+
+    return date_ls
+
+def ts_date(str):
+    return datetime.datetime.strptime(str, '%Y-%m-%d').date()
