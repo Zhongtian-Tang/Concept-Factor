@@ -20,7 +20,7 @@ URL_CONCEPT_MARK_POINT_NEWS = "https://b2b-api.10jqka.com.cn/gateway/arsenal/eve
 A = TokenUtil.TokenUtil()
 A.set_APPKEY(APPKEY, APPSECRET)
 ACCESS_TOKEN_VALUE = A.get_token(A)
-print(ACCESS_TOKEN_VALUE)
+
 
 class B2BRequest(object):
 
