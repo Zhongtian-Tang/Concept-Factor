@@ -2,7 +2,7 @@
 Author: Tangzhong-Tian 116010205@link.cuhk.edu.cn
 Date: 2023-07-26 14:18:52
 LastEditors: Tangzhong-Tian 116010205@link.cuhk.edu.cn
-LastEditTime: 2023-08-17 14:31:47
+LastEditTime: 2023-08-18 13:18:37
 FilePath: \Concept-Factor\src\main.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
@@ -77,6 +77,17 @@ def update_concept_price_index(concept_status:pd.DataFrame,
     for concept in concepts_ls:
         concept_index = cp.calculate_concept_price_index(concept, concept_similarity_status, daily_return)
         concept_index_DF[concept] = concept_index
-    
     return concept_index_DF
-    
+
+
+def update_concept_hot_index(concept_ls:list,
+                             start_date:str,
+                             end_date:str):
+    """
+    更新概念热度指数数据
+    """
+    concept_hot_index_DF = pd.DataFrame()
+    for concept in concept_ls:
+        concept_hot_index = cp.concept_hot_index(concept, date_range=f"{start_date}~{end_date}")
+        concept_hot_index_DF = pd.concat([concept_hot_index_DF, concept_hot_index], axis=0, ignore_index=True)
+    return concept_hot_index_DF

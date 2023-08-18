@@ -6,6 +6,7 @@ import numpy as np
 import calendar
 from ConceptEvent import ConceptEvent
 from sqlalchemy import create_engine, VARCHAR
+import matplotlib.pyplot as plt
 
 # 设置日志
 logging.basicConfig(filename='concept_helper.log', level=logging.INFO, format='%(asctime)s:%(levelname)s:%(message)s')
@@ -85,10 +86,21 @@ def get_stock_concepts_data(concept_status: pd.DataFrame, date: datetime.date):
 
 
 # 概念热度指数获取
-def conbcept_hot_index():
+def concept_hot_index(concept:str, date_range:str):
     """
-    统计当期标的数大于10的指数并计算热度指数
+    计算概念综合新闻指数
     """
+    id = concept_id_map()[concept]
+    concept_hot_index = ConceptEvent.get_concept_ht_index(id, date_range)
+    concept_hot_index['date'] = concept_hot_index['date'].apply(lambda x: datetime.datetime.strptime(x, '%Y-%m-%d').date())
+    concept_hot_index['val2'] = concept_hot_index['val2'].replace('', np.nan)
+    concept_hot_index['val2'] = concept_hot_index['val2'].astype(np.float64)
+    concept_hot_index['val2'] = concept_hot_index['val2'].fillna(method='ffill')
+    concept_hot_index['signal'] = concept_shift_signal(concept_hot_index['val1'], lbd=2)
+    concept_hot_index.rename(columns={'date':'tradedate','val2': 'concept_index', 'val1': 'hot_index'}, inplace=True)
+    concept_hot_index['concept'] = concept
+
+    return concept_hot_index[['tradedate','concept', 'concept_index', 'hot_index', 'signal']]
 
 
 
@@ -106,7 +118,10 @@ def concept_similarity_status(concept_status: pd.DataFrame):
     return similarity_status_data
 
 
-def daily_retun_data(start_date: str, end_date:str):
+def daily_return_data(start_date: str, end_date:str):
+    """
+    选取指定范围内的股票日收益率数据
+    """
     engine = create_engine('mysql+pymysql://tangzt:zxcv1234@10.224.1.70:3306/jydb?charset=utf8')
     query = f"""
     SELECT DATETIME, wind_code, PCT_CHG FROM jydb.dstock
@@ -164,4 +179,48 @@ def get_last_days(start_date, end_date):
     return date_ls
 
 def ts_date(str):
+    """
+    将str数据转换为datetime.date数据
+    """
     return datetime.datetime.strptime(str, '%Y-%m-%d').date()
+
+def concept_id_map():
+    """
+    获取概念名称与id的映射
+    """
+    return ConceptEvent.get_concept_all()[['id', 'name']].set_index('name').to_dict()['id']
+
+def concept_shift_signal(index_series: pd.Series, 
+                         lbd: float = 2):
+    """
+    根据概念热度生成异动信号
+    """
+    Boll = index_series.rolling(window=20).mean()
+    std = index_series.rolling(window=20).std()
+
+    upper = Boll + lbd * std
+    signal = (index_series.shift(1) < upper.shift(1)) & (index_series > upper)
+    signal = signal.astype(int)
+    
+    return signal
+
+def plot_figure(df):
+    fig, ax1 = plt.subplots(figsize=(14, 7))
+    ax1.set_xlabel('Date')
+    ax1.set_ylabel('Concept_Index', color='blue')
+    ax1.plot(df['date'], df['concept_index'], color='blue', label='Concept Index')
+    ax1.tick_params(axis='y', labelcolor='blue')
+
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('Hot Index', color='green')
+    ax2.plot(df['date'], df['hot_index'], color='green', label='Hot Index')
+    ax2.tick_params(axis='y', labelcolor='green')
+
+    for _, row in df.iterrows():
+        if row['signal'] == 1:
+            ax1.scatter(row['date'], row['concept_index'], facecolors='none', edgecolors='red', s=100, linewidths=1.5)
+    
+    plt.title('Concept Index & Hot Index')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
