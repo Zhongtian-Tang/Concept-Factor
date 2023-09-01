@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 from iFinDPy import *
 import datetime
 import pandas as pd
@@ -8,22 +8,18 @@ from ConceptEvent import ConceptEvent
 from sqlalchemy import create_engine, VARCHAR
 import matplotlib.pyplot as plt
 
-# 设置日志
-logging.basicConfig(filename='concept_helper.log', level=logging.INFO, format='%(asctime)s:%(levelname)s:%(message)s')
-
-
 # 登录函数
 def thslogin():
     # 输入用户的帐号和密码
     thsLogin = THS_iFinDLogin("hacb231","fbede3")
     if thsLogin != 0:
-        logging.info('登录失败')
+        logger.info('登录失败')
         return False
     else:
-        logging.info('登录成功')
+        logger.info('登录成功')
         return True
 
-######################################################################################################## 数据获取函数 #############################################################
+############################################################### 数据获取函数 #############################################################
 # 获取概念纳入数据
 def get_concept_status(id, name):
     """
@@ -44,11 +40,9 @@ def get_concept_status(id, name):
         )
         [['wind_code', 'sec_name', 'tradedate', 'similarity','concept','status','updatetime']]
         )
-        logging.info('概念%s数据获取成功' % name)
         return final_df
     except Exception as e:
-        logging.error('概念%s数据获取失败' % name)
-        logging.error(e)
+        logger.error(f"概念{name}数据获取失败: {e}")
         return pd.DataFrame()
         
 # 股票概念映射表
@@ -82,13 +76,14 @@ def get_stock_concepts_data(concept_status: pd.DataFrame, date: datetime.date):
     grouped['concepts'] = grouped['concepts'].apply(lambda x: ','.join(map(str, x)))
     return grouped
 
-######################################################################################################## 数据获取函数 #############################################################
+############################################################## 数据获取函数 #############################################################
 
-
+############################################################## 数据库操作函数 ############################################################
 # 概念热度指数获取
 def concept_hot_index(concept:str, date_range:str):
     """
     计算概念综合新闻指数
+    date_range例子: '2014-01-01~2023-08-31'
     """
     id = concept_id_map()[concept]
     concept_hot_index = ConceptEvent.get_concept_ht_index(id, date_range)
@@ -96,13 +91,11 @@ def concept_hot_index(concept:str, date_range:str):
     concept_hot_index['val2'] = concept_hot_index['val2'].replace('', np.nan)
     concept_hot_index['val2'] = concept_hot_index['val2'].astype(np.float64)
     concept_hot_index['val2'] = concept_hot_index['val2'].fillna(method='ffill')
-    concept_hot_index['signal'] = concept_shift_signal(concept_hot_index['val1'], lbd=2)
+    concept_hot_index['signal'] = concept_shift_signal(concept_hot_index['val1'], lbd=3)
     concept_hot_index.rename(columns={'date':'tradedate','val2': 'concept_index', 'val1': 'hot_index'}, inplace=True)
     concept_hot_index['concept'] = concept
 
     return concept_hot_index[['tradedate','concept', 'concept_index', 'hot_index', 'signal']]
-
-
 
 # 概念标的状态表
 def concept_similarity_status(concept_status: pd.DataFrame):
@@ -117,10 +110,10 @@ def concept_similarity_status(concept_status: pd.DataFrame):
     similarity_status_data = active_stocks * simpilarity_pivot
     return similarity_status_data
 
-
 def daily_return_data(start_date: str, end_date:str):
     """
     选取指定范围内的股票日收益率数据
+    这里的范围与热度指数的范围保持一致
     """
     engine = create_engine('mysql+pymysql://tangzt:zxcv1234@10.224.1.70:3306/jydb?charset=utf8')
     query = f"""
@@ -142,20 +135,6 @@ def calculate_concept_price_index(concept: str,
     weights = target_df.apply(lambda x: x / x.sum(), axis=1)
     weighted_return = (daily_return_pivot * weights).sum(axis=1)
     return weighted_return
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ##################################################################### 数据库操作函数 #####################################################################
 
@@ -191,7 +170,7 @@ def concept_id_map():
     return ConceptEvent.get_concept_all()[['id', 'name']].set_index('name').to_dict()['id']
 
 def concept_shift_signal(index_series: pd.Series, 
-                         lbd: float = 2):
+                         lbd: float = 3):
     """
     根据概念热度生成异动信号
     """
