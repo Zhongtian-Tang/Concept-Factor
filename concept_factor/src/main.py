@@ -1,12 +1,20 @@
-from loguru import logger
+import logging
+import sys
+from iFinDPy import *
 import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.types import VARCHAR, DATE, FLOAT, INT, DATETIME
 import datetime
+
+sys.path.append(r'C:\Users\hazc\Desktop\Concept-Factor\dependencies')
 import concept_helper as cp
 from ConceptEvent import ConceptEvent
 
+# 设置日志
+logging.basicConfig(filename='concept_running.log', level=logging.INFO, format='%(asctime)s:%(levelname)s:%(message)s')
 
+
+#################################################################################### 更新概念数据 ##################################################################
 def update_concepts_status():
     """
     更新市场概念纳入剔除表
@@ -24,6 +32,7 @@ def update_concepts_status():
             'valid': INT(), 'tradedate': DATE(), 'similarity': FLOAT(),
             'concept': VARCHAR(30),'status':VARCHAR(50), 'updatetime': DATETIME()}
     concepts_DF.to_sql(table_name, engine, if_exists='append', index=False, dtype=data_dict)
+        
 
 def update_map_data(date, concept_status:pd.DataFrame):
     """
@@ -37,22 +46,16 @@ def update_map_data(date, concept_status:pd.DataFrame):
     stock_concept['updatetime'] = datetime.datetime.now()
     concept_stock['updatetime'] = datetime.datetime.now()
     data_dict = {'wind_code': VARCHAR(length=9), 'count': INT(), 'record_date': DATE(), 'updatetime': DATETIME()}
-    engine = create_engine('mysql+pymysql://tangzt:zxcv1234@10.224.1.70:3306/tangzt?charset=utf8')
+    s
     stock_concept.to_sql('ths_stock_concepts_map', engine, if_exists='append', index=False, dtype=data_dict)
     concept_stock.to_sql('ths_concept_stocks_map', engine, if_exists='append', index=False, dtype=data_dict)
 
-def update_concept_hot_index(concept_ls:list,
-                             start_date:str,
-                             end_date:str):
-    """
-    更新概念热度指数数据
-    """
-    concept_hot_index_DF = pd.DataFrame()
-    for concept in concept_ls:
-        concept_hot_index = cp.concept_hot_index(concept, date_range=f"{start_date}~{end_date}")
-        concept_hot_index_DF = pd.concat([concept_hot_index_DF, concept_hot_index], axis=0, ignore_index=True)
-    return concept_hot_index_DF
+    
 
+#################################################################################### 更新概念数据 ##################################################################
+
+
+#################################################################################### 概念指数数据 ##################################################################
 def update_concept_price_index(concept_status:pd.DataFrame,
                                start_date:str,
                                end_date:str):
@@ -67,3 +70,16 @@ def update_concept_price_index(concept_status:pd.DataFrame,
         concept_index = cp.calculate_concept_price_index(concept, concept_similarity_status, daily_return)
         concept_index_DF[concept] = concept_index
     return concept_index_DF
+
+
+def update_concept_hot_index(concept_ls:list,
+                             start_date:str,
+                             end_date:str):
+    """
+    更新概念热度指数数据
+    """
+    concept_hot_index_DF = pd.DataFrame()
+    for concept in concept_ls:
+        concept_hot_index = cp.concept_hot_index(concept, date_range=f"{start_date}~{end_date}")
+        concept_hot_index_DF = pd.concat([concept_hot_index_DF, concept_hot_index], axis=0, ignore_index=True)
+    return concept_hot_index_DF
