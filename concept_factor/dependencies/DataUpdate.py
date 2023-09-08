@@ -1,7 +1,7 @@
 from loguru import logger
 import pandas as pd
 from sqlalchemy import create_engine
-from sqlalchemy.types import VARCHAR, DATE, FLOAT, INT, DATETIME
+from sqlalchemy.types import VARCHAR, DATE, FLOAT, INT, DATETIME, TEXT
 import datetime
 import concept_factor.dependencies.concept_helper as cp
 from concept_factor.dependencies.ConceptEvent import ConceptEvent
@@ -41,14 +41,20 @@ def update_map_data(date, concept_status:pd.DataFrame):
     try:
         stock_concept = cp.get_stock_concepts_data(concept_status, date)
         concept_stock = cp.get_concept_stocks_data(concept_status, date)
-        stock_concept['record_date'] = date
-        concept_stock['record_date'] = date
+        stock_concept['tradedate'] = date
+        concept_stock['tradedate'] = date
         stock_concept['updatetime'] = datetime.datetime.now()
         concept_stock['updatetime'] = datetime.datetime.now()
-        data_dict = {'wind_code': VARCHAR(length=9), 'count': INT(), 'record_date': DATE(), 'updatetime': DATETIME()}
+        stock_concept = stock_concept[['tradedate', 'wind_code', 'concepts', 'count', 'updatetime']]
+        concept_stock = concept_stock[['tradedate', 'concept', 'stocks', 'count', 'updatetime']]
+        stock_concept = stock_concept.sort_values(by=['count'],ascending=False)
+        concept_stock = concept_stock.sort_values(by=['count'], ascending=False)
+        data_dict = {'wind_code': VARCHAR(length=9), 'count': INT(), 'tradedate': DATE(), 'updatetime': DATETIME(),
+                     'concepts': TEXT(), 'concept': VARCHAR(30), 'stocks': TEXT()}
         engine = create_engine('mysql+pymysql://tangzt:zxcv1234@10.224.1.70:3306/tangzt?charset=utf8')
-        stock_concept.to_sql('ths_stock_concepts_map', engine, if_exists='append', index=False, dtype=data_dict)
-        concept_stock.to_sql('ths_concept_stocks_map', engine, if_exists='append', index=False, dtype=data_dict)
+        stock_concept.to_sql('ths_stock_concept', engine, if_exists='append', index=False, dtype=data_dict)
+        concept_stock.to_sql('ths_concept_stock', engine, if_exists='append', index=False, dtype=data_dict)
+        logger.info(f"更新概念股票映射表成功: {date}")
     except Exception as e:
         logger.error(f"更新概念股票映射表失败: {e}")
 
@@ -78,3 +84,7 @@ def update_concept_price_index(concept_status:pd.DataFrame,
         concept_index = cp.calculate_concept_price_index(concept, concept_similarity_status, daily_return)
         concept_index_DF[concept] = concept_index
     return concept_index_DF
+
+
+
+
